@@ -91,7 +91,7 @@ $defs = @(
   @{ Key="windows-ad-dns";     NameFmt="Windows-AD-DNS-{0}";      SourceVmId=167; Nets=@("BTWinInt") },
   @{ Key="ubuntu-wkst";        NameFmt="Ubuntu-Wkst-{0}";         SourceVmId=168; Nets=@("BTLinInt") },
   @{ Key="windows-ftp";        NameFmt="Windows-FTP-{0}";         SourceVmId=171; Nets=@("BTWinInt") },
-  @{ Key="windows-ciscoftd";   NameFmt="Windows-FTP-{0}";         SourceVmId=175; Nets=@("BTWinInt","BTWinEx","BTWinEx","BTWinInt") }
+  @{ Key="windows-ciscoftd";   NameFmt="Windows-CiscoFTD-{0}";    SourceVmId=175; Nets=@("BTWinInt","BTWinEx","BTWinEx","BTWinInt") }
 )
 
 function New-NetworkDevicesBlock {

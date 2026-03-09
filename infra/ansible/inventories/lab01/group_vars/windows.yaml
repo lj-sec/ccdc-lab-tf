@@ -1,0 +1,6 @@
+ansible_connection: psrp          # or winrm
+ansible_port: 5986
+ansible_user: Administrator
+ansible_password: "{{ vault_windows_admin_password }}"
+ansible_psrp_auth: ntlm           # or kerberos in domain environments
+ansible_psrp_cert_validation: ignore

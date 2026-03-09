@@ -25,9 +25,10 @@ variable "clones" {
 
     # Optional: define NICs here if you want TF to enforce network config.
     network_devices = optional(list(object({
-      bridge  = string
-      vlan_id = optional(number)
-      model  = optional(string) # e.g. "virtio"
+      bridge      = string
+      vlan_id     = optional(number)
+      mac_address = optional(string)
+      model       = optional(string) # e.g. "virtio"
     })), [])
   }))
 }

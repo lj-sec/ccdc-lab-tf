@@ -1,0 +1,12 @@
+$profiles = Get-NetConnectionProfile -ErrorAction SilentlyContinue
+
+foreach ($p in $profiles) {
+    if ($p.NetworkCategory -eq 'Public') {
+        Set-NetConnectionProfile -InterfaceIndex $p.InterfaceIndex -NetworkCategory Private
+    }
+}
+
+Set-Service -Name WinRM -StartupType Automatic
+Set-WSManQuickConfig -Force
+
+Set-NetFirewallRule -Name "WINRM-HTTP-In-TCP-PUBLIC" -RemoteAddress Any

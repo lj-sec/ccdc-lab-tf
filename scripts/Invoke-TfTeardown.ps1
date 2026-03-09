@@ -14,7 +14,7 @@ param(
 
   # Path to Terraform directory
   [Parameter()]
-  [string]$Path = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSScriptRoot, '..', 'tf'))
+  [string]$Path = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSScriptRoot, '..', 'infra', 'tf'))
 )
 
 & $TerraformPath -chdir="$Path" destroy

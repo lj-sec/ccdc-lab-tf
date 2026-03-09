@@ -22,9 +22,10 @@ resource "proxmox_virtual_environment_vm" "clones" {
     }
 
     content {
-      bridge  = network_device.value.bridge
-      vlan_id = try(network_device.value.vlan_id, null)
-      model   = try(network_device.value.model, "virtio")
+      bridge      = network_device.value.bridge
+      vlan_id     = try(network_device.value.vlan_id, null)
+      mac_address = try(network_device.value.mac_address, null)
+      model       = try(network_device.value.model, "virtio")
     }
   }
 }

@@ -1,0 +1,155 @@
+---
+- name: Configure IIS web server
+  hosts: iis_web
+  gather_facts: false
+  tasks:
+    - name: Install IIS web role
+      ansible.windows.win_feature:
+        name: Web-Server
+        include_management_tools: true
+        state: present
+      register: web_feature
+
+    - name: Reboot if required after IIS install
+      ansible.windows.win_reboot:
+      when: web_feature.reboot_required | default(false)
+
+    - name: Create web root
+      ansible.windows.win_file:
+        path: C:\Sites\Team1Web
+        state: directory
+
+    - name: Copy homepage
+      ansible.windows.win_copy:
+        src: ../files/index.html
+        dest: C:\Sites\Team1Web\index.html
+
+    - name: Point Default Web Site at our content
+      ansible.windows.win_powershell:
+        script: |
+          Import-Module WebAdministration
+          Set-ItemProperty 'IIS:\Sites\Default Web Site' -Name physicalPath -Value 'C:\Sites\Team1Web'
+          Start-WebSite -Name 'Default Web Site'
+
+    - name: Ensure World Wide Web Publishing Service is running
+      ansible.windows.win_service:
+        name: W3SVC
+        start_mode: auto
+        state: started
+
+
+- name: Configure IIS FTP server
+  hosts: iis_ftp
+  gather_facts: false
+  vars:
+    ftp_user: ftpuser
+    ftp_password: "ChangeMeNow!123"
+    ftp_root: C:\inetpub\ftproot
+    ftp_site_name: Team1Ftp
+  tasks:
+    - name: Install IIS + FTP role services
+      ansible.windows.win_feature:
+        name:
+          - Web-Server
+          - Web-Ftp-Server
+          - Web-Ftp-Service
+          - Web-Ftp-Ext
+        include_management_tools: true
+        state: present
+      register: ftp_feature
+
+    - name: Reboot if required after FTP feature install
+      ansible.windows.win_reboot:
+      when: ftp_feature.reboot_required | default(false)
+
+    - name: Create FTP local user
+      ansible.windows.win_user:
+        name: "{{ ftp_user }}"
+        password: "{{ ftp_password }}"
+        password_never_expires: true
+        state: present
+
+    - name: Create FTP root folder
+      ansible.windows.win_file:
+        path: "{{ ftp_root }}"
+        state: directory
+
+    - name: Grant FTP user modify access to FTP root
+      ansible.windows.win_powershell:
+        script: |
+          $path = "{{ ftp_root }}"
+          $user = ".\{{ ftp_user }}"
+          $acl = Get-Acl $path
+          $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $user,
+            "Modify",
+            "ContainerInherit,ObjectInherit",
+            "None",
+            "Allow"
+          )
+          $existing = $acl.Access | Where-Object {
+            $_.IdentityReference -eq $user -and
+            $_.AccessControlType -eq "Allow"
+          }
+          if (-not $existing) {
+            $acl.AddAccessRule($rule)
+            Set-Acl -Path $path -AclObject $acl
+          }
+
+    - name: Create FTP site and enable basic auth
+      ansible.windows.win_powershell:
+        script: |
+          Import-Module WebAdministration
+
+          if (-not (Test-Path "IIS:\Sites\{{ ftp_site_name }}")) {
+            New-WebFtpSite `
+              -Name "{{ ftp_site_name }}" `
+              -Port 21 `
+              -IPAddress "*" `
+              -PhysicalPath "{{ ftp_root }}"
+          }
+
+          $anonymousAuthParams = @{
+            PSPath   = "IIS:\"
+            Location = "{{ ftp_site_name }}"
+            Filter   = "/system.ftpServer/security/authentication/anonymousAuthentication"
+            Name     = "enabled"
+            Value    = $false
+          }
+
+          Set-WebConfigurationProperty @anonymousAuthParams
+
+          $basicAuthParams = @{
+            PSPath   = "IIS:\"
+            Location = "{{ ftp_site_name }}"
+            Filter   = "/system.ftpServer/security/authentication/basicAuthentication"
+            Name     = "enabled"
+            Value    = $true
+          }
+
+          Set-WebConfigurationProperty @basicAuthParams
+
+    - name: Allow FTP user read/write in IIS authorization
+      ansible.windows.win_powershell:
+        script: |
+          Import-Module WebAdministration
+
+          $filter = "/system.ftpServer/security/authorization"
+          $location = "{{ ftp_site_name }}"
+          $existing = Get-WebConfiguration -PSPath "IIS:\" -Location $location -Filter $filter |
+            Select-Object -ExpandProperty Collection |
+            Where-Object { $_.Attributes["users"].Value -eq "{{ ftp_user }}" }
+
+          if (-not $existing) {
+            Add-WebConfiguration -PSPath "IIS:\" -Location $location -Filter $filter -Value @{
+              accessType = "Allow"
+              users      = "{{ ftp_user }}"
+              permissions = "Read,Write"
+            }
+          }
+
+    - name: Ensure FTP service is running
+      ansible.windows.win_service:
+        name: ftpsvc
+        start_mode: auto
+        state: started

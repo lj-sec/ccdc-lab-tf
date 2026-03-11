@@ -1,30 +1,16 @@
+# inventory/hosts.yml
 all:
   children:
     windows:
       hosts:
-        dc01:
-          ansible_host: 172.16.101.10
-        web01:
-          ansible_host: 172.16.101.20
-        ftp01:
-          ansible_host: 172.16.101.30
-
-    domain_controllers:
-      hosts:
-        dc01:
-
-    dns_servers:
-      hosts:
-        dc01:
-
-    dhcp_servers:
-      hosts:
-        dc01:
-
-    iis_servers:
-      hosts:
-        web01:
-
-    ftp_servers:
-      hosts:
-        ftp01:
+        Web2019:
+          ansible_host: 172.25.21.140
+        Ftp2022:
+          ansible_host: 172.25.21.162
+      children:
+        iis_web:
+          hosts:
+            Web2019:
+        iis_ftp:
+          hosts:
+            Ftp2022:

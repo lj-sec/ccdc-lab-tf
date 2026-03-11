@@ -1,0 +1,78 @@
+vms:
+  - key: blue_team1_web
+    template_vm_id: 957
+    vm_id: 960
+    vm_name: Web2019
+    admin_username: Administrator
+    admin_password: "!Password123"
+    dns_servers:
+      - 172.20.240.102
+    tags:
+      - team1
+    interfaces:
+      - name: primary
+        bridge: BTWinInt
+        ipv4_address: 172.20.240.101
+        ipv4_prefix: 24
+        ipv4_gateway: 172.20.240.254
+        model: virtio
+
+  - key: blue_team1_ftp
+    template_vm_id: 958
+    vm_id: 961
+    vm_name: Ftp2022
+    admin_username: Administrator
+    admin_password: "!Password123"
+    dns_servers:
+      - 172.20.240.102
+    tags:
+      - team1
+    interfaces:
+      - name: primary
+        bridge: BTWinInt
+        ipv4_address: 172.20.240.104
+        ipv4_prefix: 24
+        ipv4_gateway: 172.20.240.254
+  
+  - key: blue_team1_wkst11
+    template_vm_id: 959
+    vm_id: 962
+    vm_name: Wkst11
+    admin_username: Administrator
+    admin_password: "!Password123"
+    dns_servers:
+      - 172.20.240.102
+    tags:
+      - team1
+    interfaces:
+      - name: primary
+        bridge: BTWinInt
+        ipv4_address: 172.20.240.100
+        ipv4_prefix: 24
+        ipv4_gateway: 172.20.240.254 
+
+#  - key: fw_team1
+#    template_vm_id: 990
+#    vm_id: 970
+#    vm_name: pfSense-Team1
+#    admin_username: admin
+#    admin_password: "!Password123"
+#    dns_servers:
+#      - 1.1.1.1
+#    tags:
+#      - team1
+#      - firewall
+#    interfaces:
+#      - name: wan
+#        bridge: BTWan
+#        ipv4_address: 172.25.21.10
+#        ipv4_prefix: 24
+#        ipv4_gateway: 172.25.21.254
+#      - name: lan
+#        bridge: BTWinInt
+#        ipv4_address: 172.20.240.254
+#        ipv4_prefix: 24
+#      - name: dmz
+#        bridge: BTDmz
+#        ipv4_address: 172.20.241.254
+#        ipv4_prefix: 24

@@ -1,0 +1,47 @@
+[
+  {
+    "key": "blue_team1_web",
+    "template_vm_id": 957,
+    "vm_id": 960,
+    "vm_name": "Web2019",
+    "bridge": "BTWinInt",
+    "ipv4_address": "172.20.240.101",
+    "ipv4_prefix": 24,
+    "ipv4_gateway": "172.20.240.254",
+    "dns_server": "172.20.240.102",
+    "admin_username": "Administrator",
+    "default_password": "!Password123",
+    "public_ip": "172.25.21.140",
+    "tags": ["team1"]
+  },
+  {
+    "key": "blue_team1_ftp",
+    "template_vm_id": 958,
+    "vm_id": 961,
+    "vm_name": "Ftp2022",
+    "bridge": "BTWinInt",
+    "ipv4_address": "172.20.240.104",
+    "ipv4_prefix": 24,
+    "ipv4_gateway": "172.20.240.254",
+    "dns_server": "172.20.240.102",
+    "admin_username": "Administrator",
+    "default_password": "!Password123",
+    "public_ip": "172.25.21.162",
+    "tags": ["team1"]
+  },
+  {
+    "key": "blue_team1_wkst",
+    "template_vm_id": 959,
+    "vm_id": 962,
+    "vm_name": "Wkst11",
+    "bridge": "BTWinInt",
+    "ipv4_address": "172.20.240.100",
+    "ipv4_prefix": 24,
+    "ipv4_gateway": "172.20.240.254",
+    "dns_server": "172.20.240.102",
+    "admin_username": "Administrator",
+    "default_password": "!Password123",
+    "public_ip": "172.25.21.144",
+    "tags": ["team1"]
+  }
+]

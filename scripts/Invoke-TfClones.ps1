@@ -1,66 +1,55 @@
 <#
 .SYNOPSIS
-  Generates a Terraform .tfvars file for Proxmox full-clone definitions
-  Then runs Terraform to clone said VMs
+  Generates Terraform tfvars in the new `vms` map format and runs Terraform for Proxmox clones.
+
+.DESCRIPTION
+  This script writes `infra/tf/clones.auto.tfvars` that matches `infra/tf/variables.tf`:
+  - static values: proxmox_endpoint, proxmox_api_token, proxmox_insecure, node_name, datastore_id, tags
+  - per-VM map: vms = { ... }
+
+  Per-VM definitions are loaded from a JSON file so each VM can define its own template ID,
+  VMID, name, bridge(s), IP, DNS, credentials, and optional tags.
 
 .EXAMPLE
-  .\Invoke-TfClones.ps1 -VmIdStart 200 -TeamNumber 2 `
-    -TerraformPath "D:\terraform_1.14.5_windows_amd64\terraform.exe" `
-    -ProxmoxEndpoint "https://pve.example.com:8006/" `
-    -ProxmoxApiToken "root@pam!terraform=xxxxxxxx"
+  .\Invoke-TfClones.ps1 \
+    -ProxmoxApiToken "root@pam!terraform=xxxxxxxx" \
+    -VmSpecPath ".\vm-specs.json"
 #>
 
 [CmdletBinding()]
 param(
-  # Proxmox API token (root@pam!terraform=xxxxxxxx)
   [Parameter(Mandatory)]
   [string]$ProxmoxApiToken,
 
-  # Starting VMID - Will increment 10 from here
-  # !!!! Please be sure not to collide with existing vms !!!!
   [Parameter(Mandatory)]
-  [ValidateRange(1, 9999)]
-  [int]$VmIdStart,
+  [string]$VmSpecPath,
 
-  # Team number (appends to each VM name + tag)
-  [Parameter(Mandatory)]
-  [ValidateRange(1, 999)]
-  [int]$TeamNumber,
+  [Parameter()]
+  [string]$TerraformPath = "terraform", # Assumes terraform is in the Path
 
-  # Path to executable Terraform
-  [Parameter(Mandatory)]
-  [string]$TerraformPath = "terraform",
-
-  # Path to executable Ansible
-  [Parameter(Mandatory)]
-  [string]$AnsiblePath = "ansible-playbook",
-
-  # Proxmox endpoint (https://pve.example.com/)
-  [Parameter(Mandatory)]
+  [Parameter()]
   [string]$ProxmoxEndpoint = "https://ccdcpve.eku.edu",
 
-  # Proxmox invalid https cert (y/n)?
   [Parameter()]
   [bool]$ProxmoxInsecure = $true,
 
-  # Terraform's directory within the repository
   [Parameter()]
-  [string]$TerraformDir = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSScriptRoot, '..', 'infra', 'tf'))
+  [string]$NodeName = "ccdcpve",
 
-  # Ansible's directory within the repository
   [Parameter()]
-  [string]$TerraformDir = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSScriptRoot, '..', 'infra', 'ansible'))
+  [string]$DatastoreId = "local-lvm",
+
+  [Parameter()]
+  [string[]]$DefaultTags = @("terraform"),
+
+  [Parameter()]
+  [string]$TerraformDir = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSScriptRoot, '..', 'infra', 'tf')),
+
+  [Parameter()]
+  [switch]$AutoApprove
 )
 
-# Globals
 $ErrorActionPreference = "Stop"
-
-# Fixed fields
-$NodeName    = "ccdcpve"
-$DatastoreId = "local-lvm"
-$Started     = "true"
-$Tag         = "blue_team_$TeamNumber"
-$VlanId      = 20+$TeamNumber-1
 
 function Test-Executable {
   param([Parameter(Mandatory)][string]$CommandOrPath)
@@ -86,79 +75,157 @@ function Test-Executable {
 
 function Escape-HclString {
   param([Parameter(Mandatory)][string]$Value)
-  return ($Value -replace '\\', '\\\\' -replace '"', '\"')
+  return ($Value -replace '\\', '\\\\' -replace '"', '\\"')
 }
 
-function Escape-YamlDoubleQuoted {
-  param([Parameter(Mandatory)][string]$Value)
-  return ($Value -replace '\\', '\\\\' -replace '"', '\"')
+function ConvertTo-HclStringList {
+  param([Parameter(Mandatory)][string[]]$Values)
+  $quoted = $Values | ForEach-Object { '"{0}"' -f (Escape-HclString -Value $_) }
+  return "[{0}]" -f ($quoted -join ", ")
 }
 
-# Check Terraform
-# Cross-version Windows detection (PS7+: $IsWindows, PS5.1: $env:OS)
-$OnWindows = if (Get-Variable -Name IsWindows -Scope Global -ErrorAction SilentlyContinue) { $IsWindows } else { $env:OS -eq 'Windows_NT' }
+function Get-RequiredProperty {
+  param(
+    [Parameter(Mandatory)]$Object,
+    [Parameter(Mandatory)][string]$Name,
+    [Parameter(Mandatory)][string]$VmKey
+  )
 
-if ($OnWindows) {
-  # On Windows, require a real .exe path that exists
-  if (-not (Test-Path -LiteralPath $TerraformPath) -or ([IO.Path]::GetExtension($TerraformPath) -ne '.exe')) {
-    throw "Terraform executable (.exe) not found at $TerraformPath"
+  $prop = $Object.PSObject.Properties[$Name]
+  if (-not $prop -or [string]::IsNullOrWhiteSpace([string]$prop.Value)) {
+    throw "VM '$VmKey' is missing required property '$Name' in $VmSpecPath"
   }
-} else {
-  # On Linux/macOS, allow either:
-  #  1) an explicit path to an executable file, OR
-  #  2) a command name discoverable in PATH (e.g. 'terraform')
-  $cmd = Get-Command -Name $TerraformPath -ErrorAction SilentlyContinue
-  if (-not $cmd) {
-    # If they passed a path, validate it exists and is executable-ish
-    if (-not (Test-Path -LiteralPath $TerraformPath)) {
-      throw "Terraform command not found in PATH and file not found at $TerraformPath"
-    }
-  }
+
+  return $prop.Value
 }
 
 Test-Executable -CommandOrPath $TerraformPath
-if ($RunAnsible) {
-  Test-Executable -CommandOrPath $AnsibleExe
-}
 
 if (-not (Test-Path -LiteralPath $TerraformDir)) {
   throw "TerraformDir not found: $TerraformDir"
 }
-if (-not (Test-Path -LiteralPath $AnsibleDir)) {
-  throw "AnsibleDir not found: $AnsibleDir"
+if (-not (Test-Path -LiteralPath $VmSpecPath)) {
+  throw "VmSpecPath not found: $VmSpecPath"
 }
 
-$inventoryDir = Join-Path $AnsibleDir "inventory"
-$groupVarsDir = Join-Path $inventoryDir "group_vars"
-$playbookPath = Join-Path $AnsibleDir "playbooks"
+$specRaw = Get-Content -LiteralPath $VmSpecPath -Raw
+$vmSpecs = $specRaw | ConvertFrom-Json
 
-New-Item -ItemType Directory -Force -Path $inventoryDir | Out-Null
-New-Item -ItemType Directory -Force -Path $groupVarsDir | Out-Null
+if ($null -eq $vmSpecs) {
+  throw "No VM specs found in $VmSpecPath"
+}
 
-$tfvarsPath   = Join-Path $TerraformDir "clones.auto.tfvars"
-$planPath     = Join-Path $TerraformDir "tfplan"
-$hostsPath    = Join-Path $inventoryDir "hosts.yaml"
-$groupVarsPath = Join-Path $groupVarsDir "windows.yaml"
+if ($vmSpecs -isnot [System.Collections.IEnumerable] -or $vmSpecs -is [string]) {
+  $vmSpecs = @($vmSpecs)
+}
 
-$tfvarsContent
+if ($vmSpecs.Count -eq 0) {
+  throw "VM spec list is empty in $VmSpecPath"
+}
 
-$hostsContent
+$vmBlocks = New-Object System.Collections.Generic.List[string]
+foreach ($vm in $vmSpecs) {
+  $key = Get-RequiredProperty -Object $vm -Name "key" -VmKey "unknown"
 
-$groupVarsContent
+  $templateVmId = [int](Get-RequiredProperty -Object $vm -Name "template_vm_id" -VmKey $key)
+  $vmId         = [int](Get-RequiredProperty -Object $vm -Name "vm_id" -VmKey $key)
+  $vmName       = [string](Get-RequiredProperty -Object $vm -Name "vm_name" -VmKey $key)
+  $ipv4Address  = [string](Get-RequiredProperty -Object $vm -Name "ipv4_address" -VmKey $key)
+  $ipv4Prefix   = [int](Get-RequiredProperty -Object $vm -Name "ipv4_prefix" -VmKey $key)
+  $ipv4Gateway  = [string](Get-RequiredProperty -Object $vm -Name "ipv4_gateway" -VmKey $key)
+  $dnsServer    = [string](Get-RequiredProperty -Object $vm -Name "dns_server" -VmKey $key)
 
-$tfvarsContent   | Out-File -FilePath $tfvarsPath -Encoding utf8 -Force -NoNewline
-$hostsContent    | Out-File -FilePath $hostsPath -Encoding utf8 -Force -NoNewline
-$groupVarsContent| Out-File -FilePath $groupVarsPath -Encoding utf8 -Force -NoNewline
+  $bridge = $null
+  if ($vm.PSObject.Properties['bridge']) {
+    $bridge = [string]$vm.bridge
+  }
 
+  $bridges = @()
+  if ($vm.PSObject.Properties['bridges'] -and $null -ne $vm.bridges) {
+    $bridges = @($vm.bridges | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  }
+
+  if ([string]::IsNullOrWhiteSpace($bridge) -and $bridges.Count -eq 0) {
+    throw "VM '$key' must define either 'bridge' or at least one item in 'bridges'"
+  }
+
+  $adminUsername = if ($vm.PSObject.Properties['admin_username'] -and -not [string]::IsNullOrWhiteSpace([string]$vm.admin_username)) {
+    [string]$vm.admin_username
+  } else {
+    "Administrator"
+  }
+
+  $defaultPassword = if ($vm.PSObject.Properties['default_password'] -and -not [string]::IsNullOrWhiteSpace([string]$vm.default_password)) {
+    [string]$vm.admin_username
+  } else {
+    "!Password123"
+  }
+
+  $vmTags = if ($vm.PSObject.Properties['tags'] -and $null -ne $vm.tags) {
+    @($vm.tags | ForEach-Object { [string]$_ })
+  } else {
+    @()
+  }
+
+  $lines = New-Object System.Collections.Generic.List[string]
+  $lines.Add("    `"$(Escape-HclString -Value $key)`" = {")
+  $lines.Add("      template_vm_id = $templateVmId")
+  $lines.Add("      vm_id          = $vmId")
+  $lines.Add("      vm_name        = `"$(Escape-HclString -Value $vmName)`"")
+
+  if (-not [string]::IsNullOrWhiteSpace($bridge)) {
+    $lines.Add("      bridge         = `"$(Escape-HclString -Value $bridge)`"")
+  }
+  if ($bridges.Count -gt 0) {
+    $lines.Add("      bridges        = $(ConvertTo-HclStringList -Values $bridges)")
+  }
+
+  $lines.Add("      ipv4_address   = `"$(Escape-HclString -Value $ipv4Address)`"")
+  $lines.Add("      ipv4_prefix    = $ipv4Prefix")
+  $lines.Add("      ipv4_gateway   = `"$(Escape-HclString -Value $ipv4Gateway)`"")
+  $lines.Add("      dns_server     = `"$(Escape-HclString -Value $dnsServer)`"")
+  $lines.Add("      admin_username = `"$(Escape-HclString -Value $adminUsername)`"")
+  $lines.Add("      admin_password = `"$(Escape-HclString -Value $defaultPassword)`"")
+
+  if ($vmTags.Count -gt 0) {
+    $lines.Add("      tags           = $(ConvertTo-HclStringList -Values $vmTags)")
+  }
+
+  $lines.Add("    }")
+  $vmBlocks.Add(($lines -join [Environment]::NewLine))
+}
+
+$tfvarsPath = Join-Path $TerraformDir "clones.auto.tfvars"
+$planPath   = Join-Path $TerraformDir "tfplan"
+
+$tfvarsContent = @"
+proxmox_endpoint  = "$(Escape-HclString -Value $ProxmoxEndpoint)"
+proxmox_api_token = "$(Escape-HclString -Value $ProxmoxApiToken)"
+proxmox_insecure  = $($ProxmoxInsecure.ToString().ToLowerInvariant())
+
+node_name    = "$(Escape-HclString -Value $NodeName)"
+datastore_id = "$(Escape-HclString -Value $DatastoreId)"
+tags         = $(ConvertTo-HclStringList -Values $DefaultTags)
+
+vms = {
+$($vmBlocks -join [Environment]::NewLine)
+}
+"@
+
+$tfvarsContent | Out-File -FilePath $tfvarsPath -Encoding utf8 -Force -NoNewline
 Write-Host "Wrote $tfvarsPath"
-Write-Host "Wrote $hostsPath"
-Write-Host "Wrote $groupVarsPath"
 
 & $TerraformPath -chdir="$TerraformDir" init
 if ($LASTEXITCODE -ne 0) { throw "terraform init failed" }
 
 & $TerraformPath -chdir="$TerraformDir" plan -var-file="$tfvarsPath" -out="$planPath"
 if ($LASTEXITCODE -ne 0) { throw "terraform plan failed" }
+
+if ($AutoApprove) {
+  & $TerraformPath -chdir="$TerraformDir" apply -auto-approve "$planPath"
+  if ($LASTEXITCODE -ne 0) { throw "terraform apply failed" }
+  exit 0
+}
 
 $confirmation = Read-Host "Apply changes? (y/N)"
 if ($confirmation -ine "y") {
@@ -169,11 +236,4 @@ if ($confirmation -ine "y") {
 & $TerraformPath -chdir="$TerraformDir" apply "$planPath"
 if ($LASTEXITCODE -ne 0) { throw "terraform apply failed" }
 
-if ($RunAnsible) {
-  if (-not (Test-Path -LiteralPath $playbookPath)) {
-    throw "Playbook not found: $playbookPath"
-  }
-
-  & $AnsibleExe -i $hostsPath $playbookPath
-  if ($LASTEXITCODE -ne 0) { throw "ansible-playbook failed" }
-}
+exit 0

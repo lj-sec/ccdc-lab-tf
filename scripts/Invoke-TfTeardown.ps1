@@ -18,3 +18,6 @@ param(
 )
 
 & $TerraformPath -chdir="$Path" destroy
+if ($LASTEXITCODE -ne 0) { throw "terraform destroy failed" }
+
+exit 0

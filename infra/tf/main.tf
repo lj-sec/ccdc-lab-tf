@@ -1,31 +1,46 @@
 resource "proxmox_virtual_environment_vm" "clones" {
-  for_each  = var.clones
-  node_name = each.value.node_name
+  for_each  = var.vms
+  node_name = var.node_name
   vm_id     = each.value.vm_id
-  name      = each.value.name
-  started   = each.value.started
-  tags      = each.value.tags
+  name      = each.value.vm_name
+  started   = true
+  tags      = try(each.value.tags, var.tags)
 
   pool_id = proxmox_virtual_environment_pool.blue_team.pool_id
 
   clone {
-    vm_id        = each.value.source_vm_id
+    vm_id        = each.value.template_vm_id
     full         = true
     retries      = 3
-    datastore_id = try(each.value.datastore_id, null)
+    datastore_id = var.datastore_id
   }
 
   dynamic "network_device" {
-    for_each = {
-      for idx, nic in try(each.value.network_devices, []) :
-      idx => nic
-    }
+    for_each = length(try(each.value.bridges, [])) > 0 ? each.value.bridges : [each.value.bridge]
 
     content {
-      bridge      = network_device.value.bridge
-      vlan_id     = try(network_device.value.vlan_id, null)
-      mac_address = try(network_device.value.mac_address, null)
-      model       = try(network_device.value.model, "virtio")
+      bridge = network_device.value
+      model  = "virtio"
+    }
+  }
+
+  initialization {
+    datastore_id = var.datastore_id
+
+    ip_config {
+      ipv4 {
+        address = "${each.value.ipv4_address}/${each.value.ipv4_prefix}"
+        gateway = each.value.ipv4_gateway
+      }
+    }
+
+    dns {
+      servers = [each.value.dns_server]
+    }
+
+    user_account {
+      username = try(each.value.admin_username, "Administrator")
+      password = each.value.admin_password
     }
   }
 }

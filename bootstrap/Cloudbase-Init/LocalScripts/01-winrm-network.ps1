@@ -1,3 +1,8 @@
+<#
+.SYNOPSIS
+    Enables and allows winrm through the Public firewall profile
+#>
+
 $profiles = Get-NetConnectionProfile -ErrorAction SilentlyContinue
 
 foreach ($p in $profiles) {

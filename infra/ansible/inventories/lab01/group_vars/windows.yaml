@@ -1,7 +1,8 @@
-# group_vars/windows.yml
 ansible_connection: psrp
 ansible_port: 5985
-ansible_user: Administrator
+ansible_psrp_protocol: http
+ansible_psrp_auth: ntlm
+ansible_psrp_cert_validation: ignore
+
+ansible_user: "Administrator"
 ansible_password: "!Password123"
-ansible_winrm_transport: ntlm
-ansible_winrm_server_cert_validation: ignore

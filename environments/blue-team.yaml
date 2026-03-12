@@ -1,0 +1,72 @@
+globals:
+  team_tag_prefix: team
+  vm_id_stride: 100
+
+  public_ip_formula:
+    octet_1: 172
+    octet_2: 25
+    third_octet_base: 20
+
+  ansible_defaults:
+    windows:
+      ansible_connection: psrp
+      ansible_port: 5986
+      ansible_psrp_auth: ntlm
+      ansible_psrp_cert_validation: ignore
+    linux:
+      ansible_connection: ssh
+      ansible_port: 22
+
+vms:
+  - key: web
+    template_vm_id: 957
+    vm_id_base: 960
+    vm_name: "Web2019-T{{ team }}"
+    admin_username: Administrator
+    admin_password: "!Password123"
+    dns_servers:
+      - 172.20.240.102
+    tags:
+      - windows
+      - web
+    interfaces:
+      - name: primary
+        bridge: BTWinInt
+        ipv4_address: 172.20.240.101
+        ipv4_prefix: 24
+        ipv4_gateway: 172.20.240.254
+        model: virtio
+    inventory:
+      public_ip_last_octet: 140
+      groups:
+        - windows
+        - iis_web
+    ansible:
+      playbooks:
+        - playbooks/iis.yaml
+
+  - key: ftp
+    template_vm_id: 958
+    vm_id_base: 961
+    vm_name: "Ftp2022-T{{ team }}"
+    admin_username: Administrator
+    admin_password: "!Password123"
+    dns_servers:
+      - 172.20.240.102
+    tags:
+      - windows
+      - ftp
+    interfaces:
+      - name: primary
+        bridge: BTWinInt
+        ipv4_address: 172.20.240.104
+        ipv4_prefix: 24
+        ipv4_gateway: 172.20.240.254
+    inventory:
+      public_ip_last_octet: 162
+      groups:
+        - windows
+        - iis_ftp
+    ansible:
+      playbooks:
+        - playbooks/iis.yaml

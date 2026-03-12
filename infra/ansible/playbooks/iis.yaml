@@ -2,6 +2,18 @@
 - name: Configure IIS web server
   hosts: iis_web
   gather_facts: false
+  vars:
+    web_root: "C:\\Sites\\Team{{ team_number }}Web"
+    web_homepage_src: "../files/index.html"
+    web_site_name: "Default Web Site"
+
+  pre_tasks:
+    - name: Ensure team_number is defined
+      ansible.builtin.assert:
+        that:
+          - team_number is defined
+        fail_msg: "team_number was not provided to the playbook."
+
   tasks:
     - name: Install IIS web role
       ansible.windows.win_feature:
@@ -16,20 +28,20 @@
 
     - name: Create web root
       ansible.windows.win_file:
-        path: C:\Sites\Team1Web
+        path: "{{ web_root }}"
         state: directory
 
     - name: Copy homepage
       ansible.windows.win_copy:
-        src: ../files/index.html
-        dest: C:\Sites\Team1Web\index.html
+        src: "{{ web_homepage_src }}"
+        dest: "{{ web_root }}\\index.html"
 
     - name: Point Default Web Site at our content
       ansible.windows.win_powershell:
         script: |
           Import-Module WebAdministration
-          Set-ItemProperty 'IIS:\Sites\Default Web Site' -Name physicalPath -Value 'C:\Sites\Team1Web'
-          Start-WebSite -Name 'Default Web Site'
+          Set-ItemProperty "IIS:\Sites\{{ web_site_name }}" -Name physicalPath -Value "{{ web_root }}"
+          Start-WebSite -Name "{{ web_site_name }}"
 
     - name: Ensure World Wide Web Publishing Service is running
       ansible.windows.win_service:
@@ -42,10 +54,18 @@
   hosts: iis_ftp
   gather_facts: false
   vars:
-    ftp_user: ftpuser
+    ftp_user: "ftpuser"
     ftp_password: "ChangeMeNow!123"
-    ftp_root: C:\inetpub\ftproot
-    ftp_site_name: Team1Ftp
+    ftp_root: "C:\\inetpub\\ftproot"
+    ftp_site_name: "Team{{ team_number }}Ftp"
+
+  pre_tasks:
+    - name: Ensure team_number is defined
+      ansible.builtin.assert:
+        that:
+          - team_number is defined
+        fail_msg: "team_number was not provided to the playbook."
+
   tasks:
     - name: Install IIS + FTP role services
       ansible.windows.win_feature:
@@ -142,8 +162,8 @@
 
           if (-not $existing) {
             Add-WebConfiguration -PSPath "IIS:\" -Location $location -Filter $filter -Value @{
-              accessType = "Allow"
-              users      = "{{ ftp_user }}"
+              accessType  = "Allow"
+              users       = "{{ ftp_user }}"
               permissions = "Read,Write"
             }
           }

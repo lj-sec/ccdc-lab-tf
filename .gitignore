@@ -48,3 +48,6 @@ planout
 # Ansible
 *.retry
 .ansible/
+
+# PowerShell environment builds for Ansible
+build/
